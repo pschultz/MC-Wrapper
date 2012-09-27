@@ -79,7 +79,15 @@ sub get_start_command {
 my $check_for_save = 0;
 
 unless( $pid ) {
+    open(SERVER_PIDFILE, "> $spid_file") or die("Couldn't open $spid_file: $!\n");
+
     $mcpid = open2( *MCOUTPUT, *MCINPUT, get_start_command());
+    print SERVER_PIDFILE $mcpid;
+    close(SERVER_PIDFILE);
+
+    open(PIDFILE,">$pid_file") or die "Couldn't open $pid_file: $!\n";
+    print PIDFILE $$;
+    close(PIDFILE);
 
     unless($console_mode) {
         $my_log = open(LOG, ">>$ENV{MINECRAFT_HOME}/mcwrapper.log");
