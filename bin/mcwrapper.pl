@@ -33,7 +33,8 @@ chomp $tar_default;
 my $mcpid;
 my $command;
 
-die "MINECRAFT_HOME is not set." unless( exists $ENV{MINECRAFT_HOME} && -e $ENV{MINECRAFT_HOME});
+die "MINECRAFT_HOME is not set." unless( exists $ENV{MINECRAFT_HOME} );
+die "$ENV{MINECRAFT_HOME} does not exist." unless( -e $ENV{MINECRAFT_HOME} );
 
 my $backup_dir = $ENV{MINECRAFT_BACKUP_DIR} || $ENV{MINECRAFT_HOME} . "/backup";
 my $world = $ENV{MINECRAFT_WORLD} || 'world';
