@@ -163,7 +163,6 @@ unless( $pid ) {
 
     my $direct_next_line_to;
     while( my $mc_said = <MCOUTPUT> ) {
-        echo_debug($mc_said);
         if( $check_for_save && $mc_said =~ /Save complete/i ) {
             echo_debug("Caught Save Complete. Completing backup.");
             $complete_backup->();
