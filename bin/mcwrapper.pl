@@ -181,11 +181,3 @@ unless( $pid ) {
         }
     }
 }
-else {
-    echo_debug("CLOSED");
-    unless( $debug ) {
-        open(PIDFILE,">$pid_file") or warn "Couldn't open $pid_file: $!\n";
-        print PIDFILE $pid;
-        close(PIDFILE);
-    }
-}
