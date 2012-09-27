@@ -149,7 +149,7 @@ unless( $pid ) {
 
     local $SIG{INT} = $server_shutdown;
     local $SIG{TERM} = $server_shutdown;
-    local $SIG{HUP} = $server_shutdown;
+    local $SIG{QUIT} = $server_shutdown;
 
     local $SIG{USR1} = $start_backup;
 
