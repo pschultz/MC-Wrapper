@@ -1,29 +1,30 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 # This program is free software and is provided to you with NO WARRANTY.
 # You are free to modify and distribute this program under the terms of
-# the GNU GPL v2.1. See the LICENSE file or visit 
+# the GNU GPL v2.1. See the LICENSE file or visit
 # http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt for more details
 
 use strict;
+use warnings;
+
 use IPC::Open2;
 use Proc::Daemon;
 use Getopt::Long;
 
 my $debug = '';
 my $console_mode = '';
-my $result = GetOptions( 	
-	"debug"	=>\$debug,
-	"console"	=>\$console_mode
+my $result = GetOptions(
+    "debug"   => \$debug,
+    "console" => \$console_mode
 );
 
 $console_mode = 1 if $debug;
 
 sub echo_debug {
-	my $message = shift;
-	chomp($message);
-	print "[MC-WRAPPER DEBUG] $message\n" if $debug;
+    my $message = shift;
+    chomp($message);
+    print "[MC-WRAPPER DEBUG] $message\n" if $debug;
 }
-
 
 my $java_default = `which java`;
 chomp($java_default);
@@ -53,116 +54,120 @@ $mc_user_id = getpwnam($mc_user) if $mc_user;
 my $pid;
 
 unless( $console_mode ) {
-	my %opts = ();
-	$opts{work_dir} = $ENV{MINECRAFT_HOME};
-	$opts{setuid} = $mc_user_id if $mc_user_id;
-	my $daemon = Proc::Daemon->new(%opts);
-	$pid = $daemon->Init;
+    my %opts = ();
+    $opts{work_dir} = $ENV{MINECRAFT_HOME};
+    $opts{setuid} = $mc_user_id if $mc_user_id;
+    my $daemon = Proc::Daemon->new(%opts);
+    $pid = $daemon->Init;
 }
 else {
-	$pid = 0;
+    $pid = 0;
 }
 
+sub get_start_command {
+    my $cmd = "$java -Xmx1024M -Xms1024M -jar $jar nogui 2>&1";
+    return $cmd;
+}
 
 
 my $check_for_save = 0;
 
 unless( $pid ) {
-	print "HERE" if $debug;
-	$mcpid = open2( *MCOUTPUT, *MCINPUT, "$java -Xmx1024M -Xms1024M -jar $jar nogui 2>&1");
-	$| = 1;
+    $mcpid = open2( *MCOUTPUT, *MCINPUT, get_start_command());
 
-	local $SIG{ALRM} = sub {
-		print MCINPUT "save-on\n";
-		$check_for_save = 0;
-		my $message = "WARNING: Backup failed. Minecraft didn't respond with save signal.";
-		echo_debug( $message );
-		print MCINPUT "say $message\n";
-	};
+    $| = 1;
 
-	# Setup control signals for the init script
-	local $SIG{USR1} = sub {
-		print "received backup signal\n";
-		print MCINPUT "save-off\n";
-		print MCINPUT "save-all\n";
+    local $SIG{ALRM} = sub {
+        print MCINPUT "save-on\n";
+        $check_for_save = 0;
+        my $message = "WARNING: Backup failed. Minecraft didn't respond with save signal.";
+        echo_debug( $message );
+        print MCINPUT "say $message\n";
+    };
 
-		#sleep 2; # wait for save to complete
-		$check_for_save = 1;
-		alarm 30;
-	};
+    # Setup control signals for the init script
+    my $start_backup = sub {
+        print "received backup signal\n";
+        print MCINPUT "save-off\n";
+        print MCINPUT "save-all\n";
 
-	my $complete_backup = sub {
-		alarm 0;
-		$check_for_save = 0;
-		my @now = (localtime)[5,4,3];
-		my $year = $now[0] + 1900;
-		my $month = $now[1] + 1;
-		my $day = $now[2];
-		my $ts = time;
-		my $bkfile = $backup_dir . "/" . sprintf("%s-%04d-%02d-%02d-%d.tar.gz",$world,$year,$month,$day,$ts );
-		
-		unless( system( $tar, 'czvf',$bkfile, $world ) == 0 ) {
-			warn "Unable to create backup.";
-		}
-		echo_debug("Backup complete. enabling save");
-		print MCINPUT "save-on\n";
-	};
+        #sleep 2; # wait for save to complete
+        $check_for_save = 1;
+        alarm 30;
+    };
 
-	my $server_shutdown = sub {
-		echo_debug("Received shutdown signal. Shutdown in $shutdown_warning seconds.");
-		if( $shutdown_warning ) {
-			print MCINPUT "say Server is shutting down in $shutdown_warning seconds.\n";
-			sleep $shutdown_warning;
-		}
-		print MCINPUT "stop\n";
-		echo_debug("stop issued. Waiting to ensure clean shutdown.");
-		sleep 2; # wait for clean shutdown
-		kill "KILL", $mcpid; # make sure it's really dead
-		close(MCOUTPUT);
-		close(MCINPUT);
-		echo_debug("Shutdown complete. Good-bye.");
-		exit;
-	};
+    my $complete_backup = sub {
+        alarm 0;
+        $check_for_save = 0;
+        my @now = (localtime)[5,4,3];
+        my $year = $now[0] + 1900;
+        my $month = $now[1] + 1;
+        my $day = $now[2];
+        my $ts = time;
+        my $bkfile = $backup_dir . "/" . sprintf("%s-%04d-%02d-%02d-%d.tar.gz",$world,$year,$month,$day,$ts );
 
+        unless( system( $tar, 'czvf',$bkfile, $world ) == 0 ) {
+            warn "Unable to create backup.";
+        }
+        echo_debug("Backup complete. enabling save");
+        print MCINPUT "save-on\n";
+    };
 
-	local $SIG{INT} = $server_shutdown;
-	local $SIG{TERM} = $server_shutdown;
-	local $SIG{HUP} = $server_shutdown;
+    my $server_shutdown = sub {
+        echo_debug("Received shutdown signal. Shutdown in $shutdown_warning seconds.");
+        if( $shutdown_warning ) {
+            print MCINPUT "say Server is shutting down in $shutdown_warning seconds.\n";
+            sleep $shutdown_warning;
+        }
+        print MCINPUT "stop\n";
+        echo_debug("stop issued. Waiting to ensure clean shutdown.");
+        sleep 2; # wait for clean shutdown
+        kill "KILL", $mcpid; # make sure it's really dead
+        close(MCOUTPUT);
+        close(MCINPUT);
+        echo_debug("Shutdown complete. Good-bye.");
+        exit;
+    };
 
-	my $direct_next_line_to;
-	while( my $mc_said = <MCOUTPUT> ) {
-		echo_debug($mc_said);
-		if( $check_for_save && $mc_said =~ /Save complete/i ) {
-		#if( $check_for_save && $mc_said =~ /gobbly goop/i ) {
-			echo_debug("Caught Save Complete. Completing backup.");
-			$complete_backup->();
-		}
+    local $SIG{INT} = $server_shutdown;
+    local $SIG{TERM} = $server_shutdown;
+    local $SIG{HUP} = $server_shutdown;
 
-		if( $direct_next_line_to && $mc_said =~ /(Connected players:.+)$/) {
-			echo_debug("Listing players for $direct_next_line_to");
-			print MCINPUT "tell $direct_next_line_to $1\n";
-			$direct_next_line_to = '';
-		}
+    local $SIG{USR1} = $start_backup;
 
-		if( $MOTD && $mc_said =~ /\[INFO\]\s([^\[]+)\[\/[0-9\.:]+\]\slogged in/ ) {
-			my $player = $1;
-			echo_debug("giving the MOTD to $player");
-			#$player =~ s/\s$//;
-			print MCINPUT "tell $player $MOTD\n";
-		}
+    my $direct_next_line_to;
+    while( my $mc_said = <MCOUTPUT> ) {
+        echo_debug($mc_said);
+        if( $check_for_save && $mc_said =~ /Save complete/i ) {
+            echo_debug("Caught Save Complete. Completing backup.");
+            $complete_backup->();
+        }
 
-		if( $mc_said =~ /\[INFO\]\s([^\s]+) tried command: list/ ) {
-			print MCINPUT "list\n";
-			$direct_next_line_to = $1;
-			echo_debug("$direct_next_line_to issued list");
-		}
-	}
+        if( $direct_next_line_to && $mc_said =~ /(Connected players:.+)$/) {
+            echo_debug("Listing players for $direct_next_line_to");
+            print MCINPUT "tell $direct_next_line_to $1\n";
+            $direct_next_line_to = '';
+        }
+
+        if( $MOTD && $mc_said =~ /\[INFO\]\s([^\[]+)\[\/[0-9\.:]+\]\slogged in/ ) {
+            my $player = $1;
+            echo_debug("giving the MOTD to $player");
+            #$player =~ s/\s$//;
+            print MCINPUT "tell $player $MOTD\n";
+        }
+
+        if( $mc_said =~ /\[INFO\]\s([^\s]+) tried command: list/ ) {
+            print MCINPUT "list\n";
+            $direct_next_line_to = $1;
+            echo_debug("$direct_next_line_to issued list");
+        }
+    }
 }
 else {
-	echo_debug("CLOSED");
-	unless( $debug ) {
-		open(PIDFILE,">$pid_file") or warn "Couldn't open $pid_file: $!\n";
-		print PIDFILE $pid;
-		close(PIDFILE);
-	}
+    echo_debug("CLOSED");
+    unless( $debug ) {
+        open(PIDFILE,">$pid_file") or warn "Couldn't open $pid_file: $!\n";
+        print PIDFILE $pid;
+        close(PIDFILE);
+    }
 }
