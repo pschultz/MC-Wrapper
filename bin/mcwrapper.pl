@@ -19,11 +19,16 @@ my $result = GetOptions(
 );
 
 $console_mode = 1 if $debug;
+my $my_log;
 
 sub echo_debug {
     my $message = shift;
     chomp($message);
-    print "[MC-WRAPPER DEBUG] $message\n" if $debug;
+    if($debug) {
+        print "[MC-WRAPPER DEBUG] $message\n"
+    } elsif($my_log) {
+        print LOG "[MC-WRAPPER DEBUG] $message\n"
+    }
 }
 
 my $java_default = `which java`;
@@ -75,6 +80,10 @@ my $check_for_save = 0;
 
 unless( $pid ) {
     $mcpid = open2( *MCOUTPUT, *MCINPUT, get_start_command());
+
+    unless($console_mode) {
+        $my_log = open(LOG, ">>$ENV{MINECRAFT_HOME}/mcwrapper.log");
+    }
 
     $| = 1;
 
