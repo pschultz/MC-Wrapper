@@ -50,6 +50,7 @@ my $MOTD = $ENV{MINECRAFT_MOTD} || '';
 my $pid_file = $ENV{MC_WRAPPER_PID} || '/var/run/mcwrapper.pid';
 my $spid_file = $ENV{MC_SERVER_PID} || '/var/run/minecraft.pid';
 my $shutdown_warning = $ENV{MINECRAFT_SHUTDOWN_WARN} || 5;
+my $jvm_args = $ENV{JVM_ARGS} || '-Xmx1024M -Xms1024M';
 
 echo_debug("Setting MOTD to: $MOTD");
 
@@ -71,8 +72,7 @@ else {
 }
 
 sub get_start_command {
-    my $cmd = "$java -Xmx1024M -Xms1024M -jar $jar nogui 2>&1";
-    return $cmd;
+    return "$java $jvm_args -jar $jar nogui 2>&1";
 }
 
 
@@ -93,7 +93,9 @@ unless( $pid ) {
         die("Couldn't open $spid_file: $!\n");
     }
 
-    $mcpid = open2( *MCOUTPUT, *MCINPUT, get_start_command());
+    my $start_command = get_start_command();
+    echo_debug("starting server: $start_command");
+    $mcpid = open2( *MCOUTPUT, *MCINPUT, $start_command);
 
     print PIDFILE $$, "\n";
     close(PIDFILE);
